@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 executable kagamin
   main-is:     Kagamin.hs
-  ghc-options: -Wall -Werror
+  ghc-options: -Wall -Werror -threaded
   other-extensions:
     OverloadedStrings
   build-depends:
@@ -24,5 +24,10 @@ executable kagamin
     slack-api >=0.4 && <0.5,
     mtl,
     HTTP,
-    curl
+    curl,
+    dpress,
+    binary,
+    text-binary,
+    random,
+    unix
   default-language:    Haskell2010

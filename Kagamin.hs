@@ -11,7 +11,19 @@ import Data.List
 import Network.HTTP (urlEncode)
 import Unsafe.Coerce -- OH NOES
 
+-- Markov chain stuff
+import Data.Text.Binary ()
+import Data.IORef
+import DissociatedPress
+import System.Random
+import System.Posix.Signals
+import System.Exit
+import Control.Exception
+import Control.Concurrent (myThreadId)
+
 import KagaInfo (kagaToken, kagaID) -- Slack API token + bot ID
+
+type DictRef = IORef (Dictionary T.Text)
 
 kagaConfig :: SlackConfig
 kagaConfig = SlackConfig {
@@ -19,12 +31,21 @@ kagaConfig = SlackConfig {
   }
 
 main :: IO ()
-main = runBot kagaConfig kagamin ()
+main = do
+    d <- load "kagamin.dict"
+    dictref <- newIORef $! maybe defDict id d
+    t <- myThreadId
+    void $ installHandler sigINT (Catch $ intHandler t dictref) Nothing
+    runBot kagaConfig kagamin dictref
+  where
+    intHandler t r = do
+      readIORef r >>= store "kagamin.dict"
+      putStrLn "Bye!"
+      throwTo t ExitSuccess
 
 -- | Kagamin's personality entry point.
-kagamin :: SlackBot ()
+kagamin :: SlackBot DictRef
 kagamin (Message cid from msg _ _ _) = do
-  liftIO $ print cid
   if (toKagamin msg)
     then handleKagaMsg cid from msg
     else handleOtherMsg cid from msg
@@ -42,18 +63,24 @@ handleMsg cid _from msg
     return ()
 
 -- | Handle mssages NOT specifically directed at Kagamin.
-handleOtherMsg :: ChannelId -> Submitter -> T.Text -> Slack s ()
-handleOtherMsg _cid _from _msg
+handleOtherMsg :: ChannelId -> Submitter -> T.Text -> Slack DictRef ()
+handleOtherMsg _cid _from msg
   | otherwise = do
+    r <- _userState <$> get
+    liftIO $ atomicModifyIORef' r $ \d -> (updateDict (T.words msg) d, ())
     return ()
 
 -- | Handle a message directed at Kagamin.
-handleKagaMsg :: ChannelId -> Submitter -> T.Text -> Slack s ()
+handleKagaMsg :: ChannelId -> Submitter -> T.Text -> Slack DictRef ()
 handleKagaMsg cid from msg = do
   case stripLeadingMention msg of
     "suki" -> do
       from' <- submitterName from
       sendMessage cid $ stutter (T.concat [from', " no baka!!"])
+    "citat" -> do
+      r <- _userState <$> get
+      quote <- liftIO $ randomPress <$> readIORef r <*> newStdGen
+      sendMessage cid (T.unwords quote)
     "skärp dig" -> do
       postImage cid "[Sad Kagamin]" "http://ekblad.cc/i/kagasad.jpg"
     _ -> do
