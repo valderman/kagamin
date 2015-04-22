@@ -73,7 +73,7 @@ handleOtherMsg _cid _from msg
 -- | Handle a message directed at Kagamin.
 handleKagaMsg :: ChannelId -> Submitter -> T.Text -> Slack DictRef ()
 handleKagaMsg cid from msg = do
-  case stripLeadingMention msg of
+  case stripLeadingTrailingMention msg of
     "suki" -> do
         from' <- submitterName from
         sendMessage cid $ stutter (T.concat [from', " no baka!!"])
@@ -88,10 +88,11 @@ handleKagaMsg cid from msg = do
         r <- _userState <$> get
         let noPrefix = maybe msg' id $ T.stripPrefix "vad är" msg'
             noSuffix = maybe noPrefix id $ T.stripSuffix "?" noPrefix
-            q        = trim noSuffix
+            q        = T.strip noSuffix
         quote <- liftIO $ ask q <$> readIORef r <*> newStdGen
         sendMessage cid quote
-    _ -> do
+    msg' -> do
+      liftIO $ print msg'
       return ()
 
 -- | Get the name of the submitter, as seen at the start of the session.
@@ -133,19 +134,20 @@ replace from to s =
   where
     len = T.length from
 
--- | Remove any leading mentions of Kagamin, including whitespace.
-stripLeadingMention :: T.Text -> T.Text
-stripLeadingMention s
+-- | Remove any leading or trailing mentions of Kagamin, including whitespace.
+stripLeadingTrailingMention :: T.Text -> T.Text
+stripLeadingTrailingMention s
   | any (`T.isPrefixOf` s') ["kagamin,", "kagamin:"] =
     T.dropWhile isSpace $ T.drop 8 s
-  | kagaID `T.isPrefixOf` s =
-    T.dropWhile isSpace
-    . T.dropWhile (== ':')
-    . T.dropWhile isSpace
-    $ T.drop 12 s
   | otherwise =
-    s
+    dropPrefix kagaID $ dropSuffix kagaID $ s
   where s' = T.map toLower s
+
+dropPrefix :: T.Text -> T.Text -> T.Text
+dropPrefix p s = maybe s T.strip $ T.stripPrefix p s
+
+dropSuffix :: T.Text -> T.Text -> T.Text
+dropSuffix p s = maybe s T.strip $ T.stripSuffix p s
 
 -- | Post an image to a channel. Since the RTM API doesn't support attachments,
 --   this is done using the REST API via Curl.
@@ -169,7 +171,3 @@ postImage cid fallback img = liftIO $ do
 --    appear to let you do that.
 cidString :: ChannelId -> String
 cidString = T.unpack . unsafeCoerce
-
--- | Remove leading and trailing spaces.
-trim :: T.Text -> T.Text
-trim = T.dropWhileEnd isSpace . T.dropWhile isSpace
