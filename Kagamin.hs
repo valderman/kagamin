@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, TupleSections #-}
 module Main where
-import Web.Slack
+import Web.Slack hiding (lines)
 import Web.Slack.Message
 import qualified Data.Text as T
 import Data.Char
@@ -23,15 +23,39 @@ import Control.Concurrent (myThreadId)
 
 -- Link log
 import qualified Data.Set as S
+import Data.Hashable
 
 import KagaInfo (kagaToken, kagaID) -- Slack API token + bot ID
 
 type StateRef = IORef KagaState
-type Link = T.Text
+data LinkMessage = LinkMessage {
+    linkHash    :: !Int,
+    linkMessage :: !T.Text
+  }
+
+mkLinkMsg :: T.Text -> T.Text -> LinkMessage
+mkLinkMsg url s = LinkMessage (hash url) (unCrocodileUrls s)
+
+instance Show LinkMessage where
+  show (LinkMessage h m) = show h ++ ": " ++ T.unpack m
+
+instance Read LinkMessage where
+  readsPrec _ s =
+    case span (/= ':') s of
+      (_, "")  -> []
+      (h, msg) -> do
+        (h', _) <- reads h
+        [(LinkMessage h' (T.pack $ dropWhile isSpace (drop 1 msg)), "")]
+
+instance Eq LinkMessage where
+  (LinkMessage h1 _) == (LinkMessage h2 _) = h1 == h2
+
+instance Ord LinkMessage where
+  compare (LinkMessage h1 _) (LinkMessage h2 _) = compare h1 h2
 
 data KagaState = KagaState {
     stateDict  :: !(Dictionary T.Text),
-    stateLinks :: !(S.Set Link)
+    stateLinks :: !(S.Set LinkMessage)
   }
 
 getState :: (st -> a) -> Slack (IORef st) a
@@ -49,7 +73,7 @@ main :: IO ()
 main = do
     d <- load "kagamin.dict"
     appendFile "kagamin.links" ""
-    links <- T.lines . T.pack <$> readFile "kagamin.links"
+    links <- map read . lines <$> readFile "kagamin.links"
     stref <- newIORef $! KagaState {
         stateDict  = maybe defDict id d,
         stateLinks = S.fromList links
@@ -61,7 +85,7 @@ main = do
     intHandler t r = do
       st <- readIORef r
       store "kagamin.dict" (stateDict st)
-      writeFile "kagamin.links" (T.unpack . T.unlines . S.toList $ stateLinks st)
+      writeFile "kagamin.links" (unlines . map show . S.toList $ stateLinks st)
       putStrLn "Bye!"
       throwTo t ExitSuccess
 
@@ -87,9 +111,9 @@ handleMsg cid _from msg
 -- | Handle mssages NOT specifically directed at Kagamin.
 handleOtherMsg :: ChannelId -> Submitter -> T.Text -> Slack StateRef ()
 handleOtherMsg _cid _from msg
-  | Just _ <- extractUrl msg = do
+  | Just url <- extractUrl msg = do
     updState $ \s ->
-      s {stateLinks = S.insert (unCrocodileUrls msg) (stateLinks s)}
+      s {stateLinks = S.insert (mkLinkMsg url msg) (stateLinks s)}
   | otherwise = do
     updState $ \s -> s {stateDict = updateDict (T.words msg) $ stateDict s}
     return ()
@@ -135,7 +159,7 @@ handleKagaMsg cid from msg = do
     "länktips" -> do
         links <- getState stateLinks
         ix <- liftIO $ randomRIO (0, S.size links-1)
-        sendMessage cid $ S.elemAt ix links
+        sendMessage cid . linkMessage $ S.elemAt ix links
     msg'
       | "vad är" `T.isPrefixOf` msg' -> do
         let q = T.strip $ dropPrefix "vad är" $ dropSuffix "?" msg'
