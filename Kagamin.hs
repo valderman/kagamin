@@ -18,6 +18,7 @@ kagaConfig = SlackConfig {
     _slackApiToken = kagaToken
   }
 
+main :: IO ()
 main = runBot kagaConfig kagamin ()
 
 -- | Kagamin's personality entry point.
@@ -33,7 +34,7 @@ kagamin _ = do
 
 -- | Handle mssages NOT specifically directed at Kagamin.
 handleMsg :: ChannelId -> Submitter -> T.Text -> Slack s ()
-handleMsg cid from msg
+handleMsg cid _from msg
   | "dricka te" `T.isInfixOf` (T.map toLower msg) = do
     sendMessage cid "MOTHERFUCKING TEA!"
     sendMessage cid "https://www.youtube.com/watch?v=pdEcqSBx4J8"
@@ -42,7 +43,7 @@ handleMsg cid from msg
 
 -- | Handle mssages NOT specifically directed at Kagamin.
 handleOtherMsg :: ChannelId -> Submitter -> T.Text -> Slack s ()
-handleOtherMsg cid from msg
+handleOtherMsg _cid _from _msg
   | otherwise = do
     return ()
 
