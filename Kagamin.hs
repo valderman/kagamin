@@ -75,14 +75,22 @@ handleKagaMsg :: ChannelId -> Submitter -> T.Text -> Slack DictRef ()
 handleKagaMsg cid from msg = do
   case stripLeadingMention msg of
     "suki" -> do
-      from' <- submitterName from
-      sendMessage cid $ stutter (T.concat [from', " no baka!!"])
+        from' <- submitterName from
+        sendMessage cid $ stutter (T.concat [from', " no baka!!"])
     "citat" -> do
-      r <- _userState <$> get
-      quote <- liftIO $ randomPress <$> readIORef r <*> newStdGen
-      sendMessage cid (T.unwords quote)
+        r <- _userState <$> get
+        quote <- liftIO $ randomSentence <$> readIORef r <*> newStdGen
+        sendMessage cid quote
     "skärp dig" -> do
-      postImage cid "[Sad Kagamin]" "http://ekblad.cc/i/kagasad.jpg"
+        postImage cid "[Sad Kagamin]" "http://ekblad.cc/i/kagasad.jpg"
+    msg'
+      | "vad är" `T.isPrefixOf` msg' -> do
+        r <- _userState <$> get
+        let noPrefix = maybe msg' id $ T.stripPrefix "vad är" msg'
+            noSuffix = maybe noPrefix id $ T.stripSuffix "?" noPrefix
+            q        = trim noSuffix
+        quote <- liftIO $ ask q <$> readIORef r <*> newStdGen
+        sendMessage cid quote
     _ -> do
       return ()
 
@@ -161,3 +169,7 @@ postImage cid fallback img = liftIO $ do
 --    appear to let you do that.
 cidString :: ChannelId -> String
 cidString = T.unpack . unsafeCoerce
+
+-- | Remove leading and trailing spaces.
+trim :: T.Text -> T.Text
+trim = T.dropWhileEnd isSpace . T.dropWhile isSpace
