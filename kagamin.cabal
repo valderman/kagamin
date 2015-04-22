@@ -29,5 +29,6 @@ executable kagamin
     binary,
     text-binary,
     random,
-    unix
+    unix,
+    containers
   default-language:    Haskell2010

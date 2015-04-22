@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TupleSections #-}
 module Main where
 import Web.Slack
 import Web.Slack.Message
@@ -21,9 +21,24 @@ import System.Exit
 import Control.Exception
 import Control.Concurrent (myThreadId)
 
+-- Link log
+import qualified Data.Set as S
+
 import KagaInfo (kagaToken, kagaID) -- Slack API token + bot ID
 
-type DictRef = IORef (Dictionary T.Text)
+type StateRef = IORef KagaState
+type Link = T.Text
+
+data KagaState = KagaState {
+    stateDict  :: !(Dictionary T.Text),
+    stateLinks :: !(S.Set Link)
+  }
+
+getState :: (st -> a) -> Slack (IORef st) a
+getState f = get >>= fmap f . liftIO . readIORef . _userState
+
+updState :: (st -> st) -> Slack (IORef st) ()
+updState f = get >>= liftIO . flip atomicModifyIORef' ((,()) . f) . _userState
 
 kagaConfig :: SlackConfig
 kagaConfig = SlackConfig {
@@ -33,18 +48,25 @@ kagaConfig = SlackConfig {
 main :: IO ()
 main = do
     d <- load "kagamin.dict"
-    dictref <- newIORef $! maybe defDict id d
+    appendFile "kagamin.links" ""
+    links <- T.lines . T.pack <$> readFile "kagamin.links"
+    stref <- newIORef $! KagaState {
+        stateDict  = maybe defDict id d,
+        stateLinks = S.fromList links
+      }
     t <- myThreadId
-    void $ installHandler sigINT (Catch $ intHandler t dictref) Nothing
-    runBot kagaConfig kagamin dictref
+    void $ installHandler sigINT (Catch $ intHandler t stref) Nothing
+    runBot kagaConfig kagamin stref
   where
     intHandler t r = do
-      readIORef r >>= store "kagamin.dict"
+      st <- readIORef r
+      store "kagamin.dict" (stateDict st)
+      writeFile "kagamin.links" (T.unpack . T.unlines . S.toList $ stateLinks st)
       putStrLn "Bye!"
       throwTo t ExitSuccess
 
 -- | Kagamin's personality entry point.
-kagamin :: SlackBot DictRef
+kagamin :: SlackBot StateRef
 kagamin (Message cid from msg _ _ _) = do
   if (toKagamin msg)
     then handleKagaMsg cid from msg
@@ -63,33 +85,61 @@ handleMsg cid _from msg
     return ()
 
 -- | Handle mssages NOT specifically directed at Kagamin.
-handleOtherMsg :: ChannelId -> Submitter -> T.Text -> Slack DictRef ()
+handleOtherMsg :: ChannelId -> Submitter -> T.Text -> Slack StateRef ()
 handleOtherMsg _cid _from msg
+  | Just _ <- extractUrl msg = do
+    updState $ \s ->
+      s {stateLinks = S.insert (unCrocodileUrls msg) (stateLinks s)}
   | otherwise = do
-    r <- _userState <$> get
-    liftIO $ atomicModifyIORef' r $ \d -> (updateDict (T.words msg) d, ())
+    updState $ \s -> s {stateDict = updateDict (T.words msg) $ stateDict s}
     return ()
 
+-- | Remove the @<>@ surrounding URLs.
+unCrocodileUrls :: T.Text -> T.Text
+unCrocodileUrls s = maybe s T.concat $ go s
+  where
+    go str = do
+      (pre, tmp) <- breakOnEither ["<http://", "<https://"] str
+      (url, suf) <- breakOnEither [">"] (T.drop 1 tmp)
+      let suf' = T.drop 1 suf
+      return $ maybe [pre,url,suf'] ([pre,url]++) $ go suf'
+
+-- | Extract the first URL from a message, if any.
+extractUrl :: T.Text -> Maybe T.Text
+extractUrl s = do
+  (_, suf) <- breakOnEither ["<http://", "<https://"] s
+  case T.breakOn ">" (T.drop 1 suf) of
+    (_, "")  -> Nothing
+    (url, _) -> Just url
+
+breakOnEither :: [T.Text] -> T.Text -> Maybe (T.Text, T.Text)
+breakOnEither (needle:needles) str =
+  case T.breakOn needle str of
+    (_, "") -> breakOnEither needles str
+    match   -> Just match
+breakOnEither [] _ =
+  Nothing
+
 -- | Handle a message directed at Kagamin.
-handleKagaMsg :: ChannelId -> Submitter -> T.Text -> Slack DictRef ()
+handleKagaMsg :: ChannelId -> Submitter -> T.Text -> Slack StateRef ()
 handleKagaMsg cid from msg = do
   case stripLeadingTrailingMention msg of
     "suki" -> do
         from' <- submitterName from
         sendMessage cid $ stutter (T.concat [from', " no baka!!"])
     "citat" -> do
-        r <- _userState <$> get
-        quote <- liftIO $ randomSentence <$> readIORef r <*> newStdGen
+        quote <- randomSentence <$> getState stateDict <*> liftIO newStdGen
         sendMessage cid quote
     "skärp dig" -> do
         postImage cid "[Sad Kagamin]" "http://ekblad.cc/i/kagasad.jpg"
+    "länktips" -> do
+        links <- getState stateLinks
+        ix <- liftIO $ randomRIO (0, S.size links-1)
+        sendMessage cid $ S.elemAt ix links
     msg'
       | "vad är" `T.isPrefixOf` msg' -> do
-        r <- _userState <$> get
-        let noPrefix = maybe msg' id $ T.stripPrefix "vad är" msg'
-            noSuffix = maybe noPrefix id $ T.stripSuffix "?" noPrefix
-            q        = T.strip noSuffix
-        quote <- liftIO $ ask q <$> readIORef r <*> newStdGen
+        let q = T.strip $ dropPrefix "vad är" $ dropSuffix "?" msg'
+        quote <- ask q <$> getState stateDict <*> liftIO newStdGen
         sendMessage cid quote
     msg' -> do
       liftIO $ print msg'
