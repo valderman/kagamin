@@ -1,0 +1,6 @@
+KagaInfo.hs
+*.o
+*.hi
+*~
+.*
+dist/
