@@ -6,6 +6,10 @@ import qualified Data.Text as T
 import Data.Char
 import Control.Applicative
 import Control.Monad.State
+import Network.Curl (curlGet)
+import Data.List
+import Network.HTTP (urlEncode)
+import Unsafe.Coerce -- OH NOES
 
 import KagaInfo (kagaToken, kagaID) -- Slack API token + bot ID
 
@@ -19,6 +23,7 @@ main = runBot kagaConfig kagamin ()
 -- | Kagamin's personality entry point.
 kagamin :: SlackBot ()
 kagamin (Message cid from msg _ _ _) = do
+  liftIO $ print cid
   if (toKagamin msg)
     then handleKagaMsg cid from msg
     else handleOtherMsg cid from msg
@@ -48,6 +53,8 @@ handleKagaMsg cid from msg = do
     "suki" -> do
       from' <- submitterName from
       sendMessage cid $ stutter (T.concat [from', " no baka!!"])
+    "skärp dig" -> do
+      postImage cid "[Sad Kagamin]" "http://ekblad.cc/i/kagasad.jpg"
     _ -> do
       return ()
 
@@ -103,3 +110,26 @@ stripLeadingMention s
   | otherwise =
     s
   where s' = T.map toLower s
+
+-- | Post an image to a channel. Since the RTM API doesn't support attachments,
+--   this is done using the REST API via Curl.
+postImage :: ChannelId -> String -> String -> Slack s ()
+postImage cid fallback img = liftIO $ do
+    curlGet ("https://slack.com/api/chat.postMessage?" ++ url) [] 
+  where
+    url = intercalate "&" $ [
+              "token=" ++ kagaToken,
+              "channel=" ++ cidString cid,
+              "username=kagamin",
+              "as_user=true",
+              "attachments=" ++ att
+            ]
+    att = urlEncode $ concat [
+        "[{\"fallback\":\"",  fallback, "\",",
+          "\"image_url\":\"", img, "\"}]"
+      ]
+
+--  | Horribly evil, unsafe way to extract channel IDs, since slack-api doesn't
+--    appear to let you do that.
+cidString :: ChannelId -> String
+cidString = T.unpack . unsafeCoerce

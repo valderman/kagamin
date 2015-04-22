@@ -23,6 +23,8 @@ executable kagamin
     base >=4.7 && <4.8,
     text >=1.2 && <1.3,
     slack-api >=0.4 && <0.5,
-    mtl
+    mtl,
+    HTTP,
+    curl
   -- hs-source-dirs:      
   default-language:    Haskell2010
