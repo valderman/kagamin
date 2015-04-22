@@ -18,14 +18,32 @@ main = runBot kagaConfig kagamin ()
 
 -- | Kagamin's personality entry point.
 kagamin :: SlackBot ()
-kagamin (Message cid from msg _ _ _) | toKagamin msg = do
+kagamin (Message cid from msg _ _ _) = do
+  if (toKagamin msg)
+    then handleKagaMsg cid from msg
+    else handleOtherMsg cid from msg
   handleMsg cid from msg
 kagamin _ = do
   return ()
 
+-- | Handle mssages NOT specifically directed at Kagamin.
+handleMsg :: ChannelId -> Submitter -> T.Text -> Slack s ()
+handleMsg cid from msg
+  | "dricka te" `T.isInfixOf` (T.map toLower msg) = do
+    sendMessage cid "MOTHERFUCKING TEA!"
+    sendMessage cid "https://www.youtube.com/watch?v=pdEcqSBx4J8"
+  | otherwise = do
+    return ()
+
+-- | Handle mssages NOT specifically directed at Kagamin.
+handleOtherMsg :: ChannelId -> Submitter -> T.Text -> Slack s ()
+handleOtherMsg cid from msg
+  | otherwise = do
+    return ()
+
 -- | Handle a message directed at Kagamin.
-handleMsg :: ChannelId -> Submitter -> T.Text -> Slack () ()
-handleMsg cid from msg = do
+handleKagaMsg :: ChannelId -> Submitter -> T.Text -> Slack s ()
+handleKagaMsg cid from msg = do
   case stripLeadingMention msg of
     "suki" -> do
       from' <- submitterName from
