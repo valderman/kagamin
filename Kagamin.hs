@@ -7,7 +7,7 @@ import Data.Char
 import Control.Applicative
 import Control.Monad.State
 
-import KagaInfo -- Slack API token + bot ID
+import KagaInfo (kagaToken, kagaID) -- Slack API token + bot ID
 
 kagaConfig :: SlackConfig
 kagaConfig = SlackConfig {
