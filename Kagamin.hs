@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings, TupleSections #-}
 module Main where
 import Web.Slack
 import Control.Monad.State
