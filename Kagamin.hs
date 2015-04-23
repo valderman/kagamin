@@ -155,8 +155,9 @@ handleKagaMsg cid from msg = do
         postImage cid "[Sad Kagamin]" "http://ekblad.cc/i/kagasad.jpg"
     "länktips" -> do
         links <- getState stateLinks
-        ix <- liftIO $ randomRIO (0, S.size links-1)
-        sendMessage cid . linkMessage $ S.elemAt ix links
+        when (S.size links > 0) $ do
+          ix <- liftIO $ randomRIO (0, S.size links-1)
+          sendMessage cid . linkMessage $ S.elemAt ix links
     msg'
       | "vad är" `T.isPrefixOf` msg' -> do
         let q = T.strip $ dropPrefix "vad är" $ dropSuffix "?" msg'
