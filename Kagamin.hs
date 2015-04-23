@@ -1,24 +1,23 @@
 module Main where
-import Web.Slack
-import Control.Monad.State
+import Web.Slack (Event (..), SlackConfig (..), SlackBot, runBot)
 
 -- Markov chain stuff
 import Data.Text.Binary ()
-import Data.IORef
-import DissociatedPress
-import System.Posix.Signals
-import System.Exit
-import Control.Exception
+import Data.IORef (readIORef, newIORef)
+import DissociatedPress (defDict, store, load) 
+import System.Posix.Signals (installHandler, sigINT, Handler (..))
+import System.Exit (ExitCode (..))
+import Control.Exception (try, evaluate, throwTo, SomeException)
 import Control.Concurrent (myThreadId)
 
 -- Link log
-import qualified Data.Binary as B
-import qualified Data.Set as S
-import qualified Data.ByteString.Lazy as BS
+import qualified Data.Binary as B (encode, decode)
+import qualified Data.Set as S (empty)
+import qualified Data.ByteString.Lazy as BS (readFile, writeFile)
 
-import Kagamin.State
+import Kagamin.State (KagaState (..), StateRef)
 import Kagamin.TextUtils (toKagamin)
-import Kagamin.Handlers
+import Kagamin.Handlers (handleMsg, handleKagaMsg, handleOtherMsg)
 
 import KagaInfo (kagaToken, kagaID) -- Slack API token + bot ID
 
@@ -39,7 +38,7 @@ main = do
         stateLinks = links
       }
     t <- myThreadId
-    void $ installHandler sigINT (Catch $ intHandler t stref) Nothing
+    _ <- installHandler sigINT (Catch $ intHandler t stref) Nothing
     runBot kagaConfig kagamin stref
   where
     intHandler t r = do
