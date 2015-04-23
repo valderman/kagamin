@@ -1,12 +1,9 @@
 module Main where
 import Web.Slack (Event (..), SlackConfig (..), SlackBot, runBot)
-
--- Markov chain stuff
 import System.Posix.Signals (installHandler, sigINT, Handler (..))
 import System.Exit (ExitCode (..))
 import Control.Exception (throwTo)
 import Control.Concurrent (myThreadId)
-
 import Kagamin.State (StateRef, readState, writeState)
 import Kagamin.TextUtils (toKagamin)
 import Kagamin.Handlers (handleMsg, handleKagaMsg, handleOtherMsg)
