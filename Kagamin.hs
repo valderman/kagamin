@@ -22,8 +22,10 @@ import Control.Exception
 import Control.Concurrent (myThreadId)
 
 -- Link log
+import qualified Data.Binary as B
 import qualified Data.Set as S
 import Data.Hashable
+import qualified Data.ByteString.Lazy as BS
 
 import KagaInfo (kagaToken, kagaID) -- Slack API token + bot ID
 
@@ -33,19 +35,12 @@ data LinkMessage = LinkMessage {
     linkMessage :: !T.Text
   }
 
+instance B.Binary LinkMessage where
+  put (LinkMessage h m) = B.put h >> B.put m
+  get = LinkMessage <$> B.get <*> B.get
+
 mkLinkMsg :: T.Text -> T.Text -> LinkMessage
 mkLinkMsg url s = LinkMessage (hash url) (unCrocodileUrls s)
-
-instance Show LinkMessage where
-  show (LinkMessage h m) = show h ++ ": " ++ T.unpack m
-
-instance Read LinkMessage where
-  readsPrec _ s =
-    case span (/= ':') s of
-      (_, "")  -> []
-      (h, msg) -> do
-        (h', _) <- reads h
-        [(LinkMessage h' (T.pack $ dropWhile isSpace (drop 1 msg)), "")]
 
 instance Eq LinkMessage where
   (LinkMessage h1 _) == (LinkMessage h2 _) = h1 == h2
@@ -72,11 +67,13 @@ kagaConfig = SlackConfig {
 main :: IO ()
 main = do
     d <- load "kagamin.dict"
-    appendFile "kagamin.links" ""
-    links <- map read . lines <$> readFile "kagamin.links"
+    elinks <- try $! BS.readFile "kagamin.links" >>= evaluate . B.decode
+    let links = case elinks of
+                  Right l -> l
+                  Left e  -> (e :: SomeException) `seq` S.empty
     stref <- newIORef $! KagaState {
         stateDict  = maybe defDict id d,
-        stateLinks = S.fromList links
+        stateLinks = links
       }
     t <- myThreadId
     void $ installHandler sigINT (Catch $ intHandler t stref) Nothing
@@ -85,7 +82,7 @@ main = do
     intHandler t r = do
       st <- readIORef r
       store "kagamin.dict" (stateDict st)
-      writeFile "kagamin.links" (unlines . map show . S.toList $ stateLinks st)
+      BS.writeFile "kagamin.links" (B.encode $ stateLinks st)
       putStrLn "Bye!"
       throwTo t ExitSuccess
 

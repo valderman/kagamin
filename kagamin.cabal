@@ -31,5 +31,6 @@ executable kagamin
     random,
     unix,
     containers,
-    hashable
+    hashable,
+    bytestring
   default-language:    Haskell2010
