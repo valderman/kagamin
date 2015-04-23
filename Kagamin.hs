@@ -2,20 +2,12 @@ module Main where
 import Web.Slack (Event (..), SlackConfig (..), SlackBot, runBot)
 
 -- Markov chain stuff
-import Data.Text.Binary ()
-import Data.IORef (readIORef, newIORef)
-import DissociatedPress (defDict, store, load) 
 import System.Posix.Signals (installHandler, sigINT, Handler (..))
 import System.Exit (ExitCode (..))
-import Control.Exception (try, evaluate, throwTo, SomeException)
+import Control.Exception (throwTo)
 import Control.Concurrent (myThreadId)
 
--- Link log
-import qualified Data.Binary as B (encode, decode)
-import qualified Data.Set as S (empty)
-import qualified Data.ByteString.Lazy as BS (readFile, writeFile)
-
-import Kagamin.State (KagaState (..), StateRef)
+import Kagamin.State (StateRef, readState, writeState)
 import Kagamin.TextUtils (toKagamin)
 import Kagamin.Handlers (handleMsg, handleKagaMsg, handleOtherMsg)
 
@@ -28,23 +20,13 @@ kagaConfig = SlackConfig {
 
 main :: IO ()
 main = do
-    d <- load "kagamin.dict"
-    elinks <- try $! BS.readFile "kagamin.links" >>= evaluate . B.decode
-    let links = case elinks of
-                  Right l -> l
-                  Left e  -> (e :: SomeException) `seq` S.empty
-    stref <- newIORef $! KagaState {
-        stateDict  = maybe defDict id d,
-        stateLinks = links
-      }
+    stref <- readState "kagamin"
     t <- myThreadId
     _ <- installHandler sigINT (Catch $ intHandler t stref) Nothing
     runBot kagaConfig kagamin stref
   where
     intHandler t r = do
-      st <- readIORef r
-      store "kagamin.dict" (stateDict st)
-      BS.writeFile "kagamin.links" (B.encode $ stateLinks st)
+      writeState "kagamin" r
       putStrLn "Bye!"
       throwTo t ExitSuccess
 

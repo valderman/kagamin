@@ -4,13 +4,15 @@ module Kagamin.State where
 import Web.Slack
 import Control.Applicative
 import Control.Monad.State
+import Control.Exception (try, evaluate, SomeException)
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Binary as B
+import qualified Data.ByteString.Lazy as BS
 import Data.Text.Binary ()
 import Data.IORef
 import Data.Hashable
-import DissociatedPress (Dictionary)
+import DissociatedPress (Dictionary, load, store, defDict)
 import Kagamin.TextUtils
 
 type StateRef = IORef KagaState
@@ -43,3 +45,23 @@ getState f = get >>= fmap f . liftIO . readIORef . _userState
 
 updState :: (st -> st) -> Slack (IORef st) ()
 updState f = get >>= liftIO . flip atomicModifyIORef' ((,()) . f) . _userState
+
+-- | Load Kagamin state from @prefix.{dict,links}@
+readState :: FilePath -> IO StateRef
+readState prefix = do
+  d <- load $ prefix ++ ".dict"
+  elinks <- try $! BS.readFile (prefix ++ ".links") >>= evaluate . B.decode
+  let links = case elinks of
+                Right l -> l
+                Left e  -> (e :: SomeException) `seq` S.empty
+  newIORef $! KagaState {
+      stateDict  = maybe defDict id d,
+      stateLinks = links
+    }
+
+-- | Write Kagamin state to @prefix.{dict,links}@.
+writeState :: FilePath -> StateRef -> IO ()
+writeState prefix r = do
+  st <- readIORef r
+  store (prefix ++ ".dict") (stateDict st)
+  BS.writeFile (prefix ++ ".links") (B.encode $ stateLinks st)
