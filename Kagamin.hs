@@ -7,6 +7,7 @@ import Control.Concurrent (myThreadId)
 import Kagamin.State (StateRef, readState, writeState)
 import Kagamin.TextUtils (toKagamin)
 import Kagamin.Handlers (handleMsg, handleKagaMsg, handleOtherMsg)
+import Data.Text (strip)
 
 import KagaInfo (kagaToken, kagaID) -- Slack API token + bot ID
 
@@ -31,9 +32,10 @@ main = do
 --   looking to add/change behaviours.
 kagamin :: SlackBot StateRef
 kagamin (Message cid from msg _ _ _) = do
-  if (toKagamin kagaID msg)
-    then handleKagaMsg kagaID kagaToken cid from msg
-    else handleOtherMsg kagaID kagaToken cid from msg
-  handleMsg kagaID kagaToken cid from msg
+  let msg' = strip msg
+  if (toKagamin kagaID msg')
+    then handleKagaMsg kagaID kagaToken cid from msg'
+    else handleOtherMsg kagaID kagaToken cid from msg'
+  handleMsg kagaID kagaToken cid from msg'
 kagamin _ = do
   return ()
