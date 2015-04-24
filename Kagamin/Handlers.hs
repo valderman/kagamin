@@ -56,7 +56,9 @@ handleKagaMsg kid tok cid from msg = do
         sendMessage cid $ stutter (T.concat [from', " no baka!!"])
     "citat" -> do
         quote <- randomSentence <$> getState stateDict <*> liftIO newStdGen
-        sendMessage cid quote
+        if T.null quote
+          then dontKnow cid
+          else sendMessage cid quote
     "skärp dig" -> do
         postImage tok cid "[Sad Kagamin]" "http://ekblad.cc/i/kagasad.jpg"
     "länktips" -> do
@@ -72,3 +74,22 @@ handleKagaMsg kid tok cid from msg = do
     msg' -> do
       liftIO $ print msg'
       return ()
+
+oneOf :: [a] -> Slack s a
+oneOf xs = do
+  ix <- liftIO $ randomRIO (0, length xs-1)
+  return $ xs !! ix
+
+dontKnow :: ChannelId -> Slack s ()
+dontKnow cid = do
+  msg <- oneOf [
+      "hur ska jag kunna veta det?!",
+      "idiotfråga!!",
+      "skärp dig!",
+      "varför skulle jag svara på dina frågor?!",
+      "idiot!",
+      "jag är inte din googleslav!",
+      "skärp dig!"
+    ]
+  st <- liftIO randomIO
+  sendMessage cid (if st then stutter msg else msg)
