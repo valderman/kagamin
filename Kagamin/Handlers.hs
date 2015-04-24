@@ -85,7 +85,6 @@ dontKnow cid = do
   msg <- oneOf [
       "hur ska jag kunna veta det?!",
       "idiotfråga!!",
-      "skärp dig!",
       "varför skulle jag svara på dina frågor?!",
       "idiot!",
       "jag är inte din googleslav!",
