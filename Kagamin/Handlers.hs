@@ -5,7 +5,7 @@ import qualified Data.Text as T
 import Web.Slack
 import Web.Slack.Message
 import Control.Monad
-import Control.Monad.State (liftIO)
+import Control.Monad.State (MonadIO (..))
 
 -- Markov chain stuff
 import DissociatedPress
@@ -56,9 +56,7 @@ handleKagaMsg kid tok cid from msg = do
         sendMessage cid $ stutter (T.concat [from', " no baka!!"])
     "citat" -> do
         quote <- randomSentence <$> getState stateDict <*> liftIO newStdGen
-        if T.null quote
-          then dontKnow cid
-          else sendMessage cid quote
+        sendMessage cid quote
     "skärp dig" -> do
         postImage tok cid "[Sad Kagamin]" "http://ekblad.cc/i/kagasad.jpg"
     "länktips" -> do
@@ -70,12 +68,14 @@ handleKagaMsg kid tok cid from msg = do
       | "vad är" `T.isPrefixOf` msg' -> do
         let q = T.strip $ dropPrefix "vad är" $ dropSuffix "?" msg'
         quote <- ask q <$> getState stateDict <*> liftIO newStdGen
-        sendMessage cid quote
+        if T.null quote
+          then dontKnow cid
+          else sendMessage cid quote
     msg' -> do
       liftIO $ print msg'
       return ()
 
-oneOf :: [a] -> Slack s a
+oneOf :: MonadIO m => [a] -> m a
 oneOf xs = do
   ix <- liftIO $ randomRIO (0, length xs-1)
   return $ xs !! ix
