@@ -2,8 +2,7 @@ module Main where
 import Web.Slack (Event (..), SlackConfig (..), SlackBot, runBot)
 import System.Posix.Signals (installHandler, sigINT, Handler (..))
 import System.Exit (ExitCode (..))
-import Control.Exception (throwTo)
-import Control.Concurrent (myThreadId)
+import Control.Concurrent
 import Kagamin.State (StateRef, readState, writeState)
 import Kagamin.TextUtils (toKagamin)
 import Kagamin.Handlers (handleMsg, handleKagaMsg, handleOtherMsg)
@@ -21,8 +20,20 @@ main = do
     stref <- readState "kagamin"
     t <- myThreadId
     _ <- installHandler sigINT (Catch $ intHandler t stref) Nothing
+    _ <- forkIO $ stateBackup stref
     runBot kagaConfig kagamin stref
   where
+    stateBackup r = do
+      delayMins (24*60)
+      writeState "kagamin" r
+      stateBackup r
+
+    delayMins :: Int -> IO ()
+    delayMins 0   = return ()
+    delayMins n
+      | n >= 10   = threadDelay (600*1000000) >> delayMins (n-10)
+      | otherwise = threadDelay (60*1000000) >> delayMins (n-1)
+
     intHandler t r = do
       writeState "kagamin" r
       putStrLn "Bye!"
