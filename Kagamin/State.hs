@@ -13,6 +13,8 @@ import Data.Text.Binary ()
 import Data.IORef
 import Data.Hashable
 import DissociatedPress (Dictionary, load, store, defDict)
+import System.IO.Unsafe
+import Control.Concurrent.MVar
 import Kagamin.TextUtils
 
 type StateRef = IORef KagaState
@@ -36,6 +38,10 @@ instance Eq LinkMessage where
 
 instance Ord LinkMessage where
   compare (LinkMessage h1 _) (LinkMessage h2 _) = compare h1 h2
+
+{-# NOINLINE stateWriterLock #-}
+stateWriterLock :: MVar ()
+stateWriterLock = unsafePerformIO $ newMVar ()
 
 mkLinkMsg :: T.Text -> T.Text -> LinkMessage
 mkLinkMsg url s = LinkMessage (hash url) (unCrocodileUrls s)
@@ -62,6 +68,8 @@ readState prefix = do
 -- | Write Kagamin state to @prefix.{dict,links}@.
 writeState :: FilePath -> StateRef -> IO ()
 writeState prefix r = do
+  takeMVar stateWriterLock
   st <- readIORef r
   store (prefix ++ ".dict") (stateDict st)
   BS.writeFile (prefix ++ ".links") (B.encode $ stateLinks st)
+  putMVar stateWriterLock ()
