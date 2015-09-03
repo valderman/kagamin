@@ -6,6 +6,10 @@ import Web.Slack
 import Web.Slack.Message
 import Control.Monad
 import Control.Monad.State (MonadIO (..))
+import System.Random (randomRIO)
+
+import Text.Read as R
+import Data.Maybe (catMaybes)
 
 -- Markov chain stuff
 import DissociatedPress
@@ -71,6 +75,14 @@ handleKagaMsg kid tok cid from msg = do
         if T.null quote
           then dontKnow cid
           else sendMessage cid quote
+      | "rulla" `T.isPrefixOf` msg' -> do
+          let die = T.strip $ dropPrefix "rulla" msg'
+          let rm = R.readMaybe :: String -> Maybe Integer 
+          case catMaybes $ map (rm . T.unpack) $ T.splitOn (T.pack "d") die of
+           [a,b] -> do
+             num <- liftIO $ randomRIO (1, a*b)
+             sendMessage cid $ T.concat ["Du rullade ", T.pack $ show num]
+           _     -> sendMessage cid "Det d-där är ingen tärning, baka!! "
     msg' -> do
       liftIO $ print msg'
       return ()
