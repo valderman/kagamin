@@ -17,10 +17,13 @@ executable kagamin
   main-is: Kagamin.hs
   other-modules:
     KagaInfo
-    Kagamin.Handlers
     Kagamin.SlackUtils
     Kagamin.TextUtils
-    Kagamin.State
+    Kagamin.Modules
+    Kagamin.Modules.Misc
+    Kagamin.Modules.Markov
+    Kagamin.Modules.Dice
+    Kagamin.Modules.Links
   ghc-options: -Wall -Werror -threaded
   other-extensions:
     OverloadedStrings, TupleSections
