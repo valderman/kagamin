@@ -1,8 +1,10 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE CPP, TupleSections #-}
 -- | Types and functions for working with Kagamin's state.
 module Kagamin.State where
 import Web.Slack
+#if __GLASGOW_HASKELL__ < 709
 import Control.Applicative
+#endif
 import Control.Monad.State
 import Control.Exception (try, evaluate, SomeException)
 import qualified Data.Set as S

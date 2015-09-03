@@ -1,12 +1,13 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP, OverloadedStrings #-}
 module Kagamin.Handlers where
+#if __GLASGOW_HASKELL__ < 709
 import Control.Applicative
+#endif
 import qualified Data.Text as T
 import Web.Slack
 import Web.Slack.Message
 import Control.Monad
 import Control.Monad.State (MonadIO (..))
-import System.Random (randomRIO)
 
 import Text.Read as R
 import Data.Maybe (catMaybes)
@@ -82,7 +83,7 @@ handleKagaMsg kid tok cid from msg = do
            [a,b] -> do
              num <- liftIO $ randomRIO (1, a*b)
              sendMessage cid $ T.concat ["Du rullade ", T.pack $ show num]
-           _     -> sendMessage cid "Det d-där är ingen tärning, baka!! "
+           _     -> sendMessage cid (stutter "Det där är ingen tärning, baka!!")
     msg' -> do
       liftIO $ print msg'
       return ()

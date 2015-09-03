@@ -1,7 +1,9 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP, OverloadedStrings #-}
 -- | Misc. Slack-related utilities.
 module Kagamin.SlackUtils where
+#if __GLASGOW_HASKELL__ < 709
 import Control.Applicative
+#endif
 import Control.Monad.State
 import Data.List (intercalate)
 import qualified Data.Text as T
