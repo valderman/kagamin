@@ -14,15 +14,17 @@ import KagaInfo (kagaID)
 kagaDice :: IO KagaModule
 kagaDice = return $ defaultModule {kagaMsgHook = handleKagaMsg}
 
+rolls :: [T.Text]
+rolls = ["rulla", "slå"]
+
 handleKagaMsg :: MsgHook
 handleKagaMsg cid _from msg
-  | "rulla" `T.isPrefixOf` msg' = do
+  | any (`T.isPrefixOf` msg') rolls = do
     let die = T.strip $ dropPrefix "rulla" msg'
-        rm = readMaybe :: String -> Maybe Integer 
-    case catMaybes $ map (rm . T.unpack) $ T.splitOn (T.pack "d") die of
+    case catMaybes $ map (readMaybe . T.unpack) $ T.splitOn "d" die of
        [a,b] -> do
-         num <- liftIO $ randomRIO (1, a*b)
-         sendMessage cid $ T.concat ["Du rullade ", T.pack $ show num]
+         num <- liftIO $ sum <$> sequence (replicate a $ randomRIO (1, b))
+         sendMessage cid $ T.concat ["Du rullade ", T.pack $ show (num :: Int)]
        _     -> do
          sendMessage cid (stutter "Det där är ingen tärning, baka!!")
     return Next
