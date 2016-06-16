@@ -47,5 +47,6 @@ executable kagamin
     aeson,
     vector,
     random,
-    data-default
+    data-default,
+    directory
   default-language: Haskell2010

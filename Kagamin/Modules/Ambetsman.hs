@@ -2,6 +2,7 @@
 -- | Finds your way in the Ambetsman jungle 
 module Kagamin.Modules.Ambetsman where
 
+import System.Directory (doesFileExist)
 import Kagamin.Modules
 import qualified Data.Text as T
 import Web.Slack.Message
@@ -30,15 +31,18 @@ instance Default Ambetsman where
 -- | Loads the ambetsman
 loadAmbetsman :: MVar Ambetsman -> FilePath -> IO () 
 loadAmbetsman ambetsman dir = do
+  let path = (dir ++ "/assets/ambetsman.json")
   oldAmbetsman <- takeMVar ambetsman
-  ambets <- decode <$> BL.readFile (dir ++ "/assets/ambetsman.json")
+  ambets <- doesFileExist path >>= \existing -> if not existing
+                                                then return Nothing
+                                                else decode <$> BL.readFile path
   putMVar ambetsman $ fromMaybe oldAmbetsman ambets
 
 -- | Generate a job 
 jobname :: MVar Ambetsman -> IO T.Text
 jobname ambetsman = do
   Ambetsman (job, surjob) <- readMVar ambetsman 
-  prefix <- (job V.!)    <$> randomRIO (0, length job - 1)
+  prefix <- (job    V.!) <$> randomRIO (0, length job - 1)
   suffix <- (surjob V.!) <$> randomRIO (0, length surjob - 1)
   return $ prefix `T.append` suffix
 
