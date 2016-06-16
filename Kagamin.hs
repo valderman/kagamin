@@ -14,10 +14,10 @@ import Kagamin.Modules.Markov
 import Kagamin.Modules.Links
 import Kagamin.Modules.Dice
 import Kagamin.Modules.Misc
-
+import Kagamin.Modules.Ambetsman 
 
 allModules :: [IO KagaModule]
-allModules = [kagaMarkov, kagaLinks, kagaDice, kagaMisc]
+allModules = [kagaMarkov, kagaLinks, kagaDice, kagaMisc, kagaAmbetsman]
 
 kagaConfig :: SlackConfig
 kagaConfig = SlackConfig {
