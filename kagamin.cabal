@@ -41,5 +41,9 @@ executable kagamin
     unix,
     containers,
     hashable,
-    bytestring
+    bytestring,
+    aeson,
+    vector,
+    random
+
   default-language: Haskell2010
