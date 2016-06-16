@@ -30,7 +30,7 @@ executable kagamin
   build-depends:
     base >=4.7 && <4.9,
     text >=1.2 && <1.3,
-    slack-api >=0.7 && <0.8,
+    slack-api >=0.9 && <0.10,
     mtl,
     HTTP,
     curl,
