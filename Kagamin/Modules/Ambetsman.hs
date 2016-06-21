@@ -58,8 +58,9 @@ handleKagaMsg :: MVar Ambetsman -> MsgHook
 handleKagaMsg ambetsman cid _from msg
   | "vill jobba med" `T.isInfixOf` msg = do
       (Ambetsman job surjob) <- liftIO $ readMVar ambetsman
-      let (who, _)      = T.breakOn "vill jobba med" msg
-          (_, what)     = T.breakOnEnd "vill jobba med" msg
+      let msg'          = stripLeadingTrailingMention msg
+          (who, _)      = T.breakOn "vill jobba med" msg'
+          (_, what)     = T.breakOnEnd "vill jobba med" msg'
           (who', what') = (T.strip who, T.strip what)
           job'          = V.filter (what' `T.isInfixOf`) job
           surjob'       = V.filter (what' `T.isInfixOf`) surjob
