@@ -44,6 +44,10 @@ jobname ambetsman = liftIO (readMVar ambetsman) >>= randomJobFrom
 
 randomJobFrom :: Ambetsman -> Slack a T.Text
 randomJobFrom (Ambetsman job surjob) = liftIO $ do
+  putStrLn $ unwords
+    [ "Ambetsman: choosing job from", show (length job), "jobs and"
+    , show (length surjob), "surjobs."
+    ]
   prefix <- (job    V.!) <$> randomRIO (0, length job - 1)
   suffix <- (surjob V.!) <$> randomRIO (0, length surjob - 1)
   return $ prefix `T.append` suffix
@@ -72,9 +76,13 @@ handleKagaMsg ambetsman cid _from msg
           yourJob x     = sendMessage cid $ T.concat [to," borde jobba som ",x]
       preferSurjob <- liftIO randomIO
       case () of
-        _ | all null [job', surjob'] ->
+        _ | all V.null [job', surjob'] ->
             sendMessage cid $ "Det finns inga såna jobb!"
-          | null job' || preferSurjob ->
+          | V.null job' ->
+            yourJob =<< randomJobFrom (Ambetsman job surjob')
+          | V.null surjob' ->
+            yourJob =<< randomJobFrom (Ambetsman job' surjob)
+          | preferSurjob ->
             yourJob =<< randomJobFrom (Ambetsman job surjob')
           | otherwise ->
             yourJob =<< randomJobFrom (Ambetsman job' surjob)
