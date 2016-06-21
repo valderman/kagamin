@@ -17,17 +17,14 @@ import qualified Data.Vector as V
 import Control.Concurrent.MVar
 
 -- | Ambetsman type with fromJSON instance
-newtype Ambetsman = Ambetsman (V.Vector T.Text, V.Vector T.Text)
+data Ambetsman = Ambetsman (V.Vector T.Text) (V.Vector T.Text)
 
 instance FromJSON Ambetsman where
-  parseJSON (Object v) = Ambetsman <$> do
-    job    <- v .: "job"
-    surjob <- v .: "surjob"
-    return (job, surjob)
-  parseJSON _ = fail "Badly formatted json :("
+  parseJSON (Object v) = Ambetsman <$> v .: "job" <*> v .: "surjob"
+  parseJSON _          = fail "Badly formatted json :("
 
 instance Default Ambetsman where
-  def = Ambetsman (V.fromList ["idiot"], V.fromList [""])
+  def = Ambetsman (V.fromList ["idiot"]) (V.fromList [""])
 
 -- | Loads the ambetsman
 loadAmbetsman :: MVar Ambetsman -> FilePath -> IO () 
@@ -44,7 +41,7 @@ jobname :: MVar Ambetsman -> Slack a T.Text
 jobname ambetsman = liftIO (readMVar ambetsman) >>= randomJobFrom
 
 randomJobFrom :: Ambetsman -> Slack a T.Text
-randomJobFrom (Ambetsman (job, surjob)) = liftIO $ do
+randomJobFrom (Ambetsman job surjob) = liftIO $ do
   prefix <- (job    V.!) <$> randomRIO (0, length job - 1)
   suffix <- (surjob V.!) <$> randomRIO (0, length surjob - 1)
   return $ prefix `T.append` suffix
@@ -60,7 +57,7 @@ kagaAmbetsman = do
 handleKagaMsg :: MVar Ambetsman -> MsgHook
 handleKagaMsg ambetsman cid _from msg
   | "vill jobba med" `T.isInfixOf` msg = do
-      Ambetsman (job, surjob) <- liftIO $ readMVar ambetsman
+      (Ambetsman job surjob) <- liftIO $ readMVar ambetsman
       let (who, _)      = T.breakOn "vill jobba med" msg
           (_, what)     = T.breakOnEnd "vill jobba med" msg
           (who', what') = (T.strip who, T.strip what)
@@ -75,9 +72,9 @@ handleKagaMsg ambetsman cid _from msg
         _ | all null [job', surjob'] ->
             sendMessage cid $ "Det finns inga såna jobb!"
           | null job' || preferSurjob ->
-            yourJob =<< randomJobFrom (Ambetsman (job, surjob'))
+            yourJob =<< randomJobFrom (Ambetsman job surjob')
           | otherwise ->
-            yourJob =<< randomJobFrom (Ambetsman (job', surjob))
+            yourJob =<< randomJobFrom (Ambetsman job' surjob)
       return Next
   | "yrke" `T.isInfixOf` msg = do
       jn <- jobname ambetsman
