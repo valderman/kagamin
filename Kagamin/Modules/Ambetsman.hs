@@ -4,6 +4,8 @@ module Kagamin.Modules.Ambetsman where
 
 import System.Directory (doesFileExist)
 import Kagamin.Modules
+import Kagamin.TextUtils (stripLeadingTrailingMention)
+import KagaInfo (kagaID)
 import qualified Data.Text as T
 import Web.Slack.Message
 import Web.Slack (Slack)
@@ -58,7 +60,7 @@ handleKagaMsg :: MVar Ambetsman -> MsgHook
 handleKagaMsg ambetsman cid _from msg
   | "vill jobba med" `T.isInfixOf` msg = do
       (Ambetsman job surjob) <- liftIO $ readMVar ambetsman
-      let msg'          = stripLeadingTrailingMention msg
+      let msg'          = stripLeadingTrailingMention kagaID msg
           (who, _)      = T.breakOn "vill jobba med" msg'
           (_, what)     = T.breakOnEnd "vill jobba med" msg'
           (who', what') = (T.strip who, T.strip what)
