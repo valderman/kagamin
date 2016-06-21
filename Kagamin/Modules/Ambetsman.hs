@@ -6,7 +6,8 @@ import System.Directory (doesFileExist)
 import Kagamin.Modules
 import qualified Data.Text as T
 import Web.Slack.Message
-import System.Random (randomRIO)
+import Web.Slack (Slack)
+import System.Random (randomIO, randomRIO)
 import Control.Monad.State (MonadIO (..))
 import Data.Maybe (fromMaybe)
 import Data.Aeson
@@ -39,9 +40,11 @@ loadAmbetsman ambetsman dir = do
   putMVar ambetsman $ fromMaybe oldAmbetsman ambets
 
 -- | Generate a job 
-jobname :: MVar Ambetsman -> IO T.Text
-jobname ambetsman = do
-  Ambetsman (job, surjob) <- readMVar ambetsman 
+jobname :: MVar Ambetsman -> Slack a T.Text
+jobname ambetsman = liftIO (readMVar ambetsman) >>= randomJobFrom
+
+randomJobFrom :: Ambetsman -> Slack a T.Text
+randomJobFrom (Ambetsman (job, surjob)) = liftIO $ do
   prefix <- (job    V.!) <$> randomRIO (0, length job - 1)
   suffix <- (surjob V.!) <$> randomRIO (0, length surjob - 1)
   return $ prefix `T.append` suffix
@@ -56,8 +59,28 @@ kagaAmbetsman = do
 -- | Handle messages 
 handleKagaMsg :: MVar Ambetsman -> MsgHook
 handleKagaMsg ambetsman cid _from msg
+  | "vill jobba med" `T.isInfixOf` msg = do
+      Ambetsman (job, surjob) <- liftIO $ readMVar ambetsman
+      let (who, _)      = T.breakOn "vill jobba med" msg
+          (_, what)     = T.breakOnEnd "vill jobba med" msg
+          (who', what') = (T.strip who, T.strip what)
+          job'          = V.filter (what' `T.isInfixOf`) job
+          surjob'       = V.filter (what' `T.isInfixOf`) surjob
+          to            = case T.toLower who' of
+                            "jag" -> "Du"
+                            _     -> who'
+          yourJob x     = sendMessage cid $ T.concat [to," borde jobba som ",x]
+      preferSurjob <- liftIO randomIO
+      case () of
+        _ | all null [job', surjob'] ->
+            sendMessage cid $ "Det finns inga såna jobb!"
+          | null job' || preferSurjob ->
+            yourJob =<< randomJobFrom (Ambetsman (job, surjob'))
+          | otherwise ->
+            yourJob =<< randomJobFrom (Ambetsman (job', surjob))
+      return Next
   | "yrke" `T.isInfixOf` msg = do
-      jn <- liftIO $ jobname ambetsman
+      jn <- jobname ambetsman
       sendMessage cid $ T.concat ["Du borde jobba som ", jn]
       return Next
   | otherwise = return Next
