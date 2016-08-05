@@ -5,6 +5,7 @@ module Kagamin.Modules.Markov (kagaMarkov) where
 import Kagamin.Modules
 import Kagamin.TextUtils
 import Control.Concurrent.MVar
+import Control.Exception (SomeException (..), try)
 import Control.Monad.State (MonadIO (..))
 import qualified Data.Text as T
 import Web.Slack
@@ -12,66 +13,139 @@ import Web.Slack.Message
 import System.Random (newStdGen, randomIO, randomRIO)
 import DissociatedPress
 import Data.Text.Binary ()
+import qualified Data.Map.Strict as M
 import KagaInfo (kagaID)
+
+data MarkovState = MarkovState
+  { aliases    :: !(M.Map T.Text T.Text)
+  , dictionary :: !(Dictionary T.Text)
+  }
 
 kagaMarkov :: IO KagaModule
 kagaMarkov = do
-  d <- newMVar defDict
+  state <- newMVar $ MarkovState M.empty defDict
   return $ defaultModule {
-      kagaMsgHook   = handleKagaMsg d,
-      kagaOtherHook = handleOtherMsg d,
-      kagaSaveHook  = save d,
-      kagaLoadHook  = Kagamin.Modules.Markov.load d
+      kagaMsgHook   = handleKagaMsg state,
+      kagaOtherHook = handleOtherMsg state,
+      kagaSaveHook  = save state,
+      kagaLoadHook  = Kagamin.Modules.Markov.load state
     }
 
-save :: MVar (Dictionary T.Text) -> FilePath -> IO ()
-save d dir = withMVar d $ \dict -> store (dir ++ "/kagamin.dict") dict
+save :: MVar MarkovState -> FilePath -> IO ()
+save v dir = withMVar v $ \st -> do
+  store (dir ++ "/kagamin.dict") (dictionary st)
+  writeFile (dir ++ "/kagamin.markov-aliases") $ show (aliases st)
 
-load :: MVar (Dictionary T.Text) -> FilePath -> IO ()
-load d dir = do
-  olddict <- takeMVar d
+load :: MVar MarkovState -> FilePath -> IO ()
+load v dir = do
+  olddict <- dictionary <$> takeMVar v
   dict <- DissociatedPress.load $ dir ++ "/kagamin.dict"
-  putMVar d $ maybe olddict id dict
+  alias <- try $! do
+    lst <- read <$> readFile (dir ++ "/kagamin.markov-aliases")
+    length lst `seq` return lst
+  let alias' = case alias of
+        Left (SomeException _) -> M.empty
+        Right a                -> a
+  putMVar v $ MarkovState alias' (maybe olddict id dict)
 
-handleKagaMsg :: MVar (Dictionary T.Text) -> MsgHook
-handleKagaMsg dict cid _from msg
+setAlias :: MVar MarkovState -> UserId -> T.Text -> Slack () ()
+setAlias v (Id uid) alias = liftIO $ modifyMVar v $ \st -> do
+  pure (st {aliases = M.insert uid alias (aliases st)}, ())
+
+getAlias :: MVar MarkovState -> UserId -> Slack () T.Text
+getAlias v (Id uid) =
+  liftIO $ withMVar v (return . maybe uid id . M.lookup uid . aliases)
+
+applyAliases :: M.Map T.Text T.Text -> T.Text -> T.Text
+applyAliases m s = M.foldlWithKey' applyAlias s m
+  where
+    mkTag uid = T.concat ["<@", uid, ">"]
+    applyAlias msg uid alias = T.replace (mkTag uid) alias msg
+
+sendAliased :: MVar MarkovState -> ChannelId -> T.Text -> Slack () ()
+sendAliased v cid s = do
+  st <- liftIO $ withMVar v return
+  sendMessage cid (applyAliases (aliases st) s)
+
+handleKagaMsg :: MVar MarkovState -> MsgHook
+handleKagaMsg v cid from msg
+  | "kalla mig" `T.isPrefixOf` msg'
+  , UserComment uid <- from = do
+    let alias = T.strip $ dropPrefix "kalla mig" msg'
+    setAlias v uid alias
+    reportAliasChange cid alias
+    return Next
   | "vad är" `T.isPrefixOf` msg' = do
-    d <- liftIO $ withMVar dict return
-    let q = T.strip $ dropPrefix "vad är" $ dropSuffix "?" msg'
+    st <- liftIO $ withMVar v return
+    let d = dictionary st
+        q = T.strip $ dropPrefix "vad är" $ dropSuffix "?" msg'
     quote <- ask q d <$> liftIO newStdGen
     if T.null quote
       then dontKnow cid
-      else sendMessage cid quote
+      else sendAliased v cid quote
     return Next
   | "citat" == msg' = do
-    d <- liftIO $ withMVar dict return
+    st <- liftIO $ withMVar v return
+    let d = dictionary st
     quote <- randomSentence d <$> liftIO newStdGen
-    sendMessage cid quote
+    sendAliased v cid quote
     return Next
+  | "vem är jag" `T.isPrefixOf` msg'    = reportAlias v cid from
+  | "vad heter jag" `T.isPrefixOf` msg' = reportAlias v cid from
   | otherwise = do
     return Next
   where
     msg' = stripLeadingTrailingMention kagaID msg
 
-handleOtherMsg :: MVar (Dictionary T.Text) -> MsgHook
-handleOtherMsg dict _cid _from msg
+reportAlias :: MVar MarkovState -> ChannelId -> Submitter -> Slack () HookResult
+reportAlias v cid (UserComment uid) = do
+  pfx <- oneOf
+    [ "är du senil?"
+    , "är du dum?"
+    , "mår du bra?"
+    ]
+  alias <- getAlias v uid
+  maybeStutter (T.concat [pfx, " du heter ju ", alias]) >>= sendMessage cid
+  return Next
+reportAlias _ _ _ = do
+  return Next
+
+
+handleOtherMsg :: MVar MarkovState -> MsgHook
+handleOtherMsg v _cid _from msg
   | Just _ <- extractUrl msg = do
     return Next -- ignore URLs
   | otherwise                = do
-    liftIO $ modifyMVar dict $ \d -> return (updateDict (T.words msg) d, Next)
+    liftIO $ modifyMVar v $ \st -> do
+      let d = dictionary st
+      return (st {dictionary = updateDict (T.words msg) d}, Next)
 
 dontKnow :: ChannelId -> Slack s ()
 dontKnow cid = do
-  msg <- oneOf [
-      "hur ska jag kunna veta det?!",
-      "idiotfråga!!",
-      "varför skulle jag svara på dina frågor?!",
-      "idiot!",
-      "jag är inte din googleslav!",
-      "skärp dig!"
+  msg <- oneOf
+    [ "hur ska jag kunna veta det?!"
+    , "idiotfråga!!"
+    , "varför skulle jag svara på dina frågor?!"
+    , "idiot!"
+    , "jag är inte din googleslav!"
+    , "skärp dig!"
     ]
+  maybeStutter msg >>= sendMessage cid
+
+reportAliasChange :: ChannelId -> T.Text -> Slack s ()
+reportAliasChange cid alias = do
+  msg <- oneOf
+    [ T.concat ["ok, då kallar jag dig för ", alias, "... senpai"]
+    , T.concat ["ok ", alias]
+    , T.concat [alias, " är ett fjantnamn, men ok då"]
+    , T.concat ["ok då ", alias, "... men det är inte för att jag gillar dig eller så!"]
+    ]
+  maybeStutter msg >>= sendMessage cid
+
+maybeStutter :: T.Text -> Slack s T.Text
+maybeStutter msg = do
   st <- liftIO randomIO
-  sendMessage cid (if st then stutter msg else msg)
+  pure $ if st then stutter msg else msg
 
 oneOf :: MonadIO m => [a] -> m a
 oneOf xs = do
