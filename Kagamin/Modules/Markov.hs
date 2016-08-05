@@ -6,12 +6,13 @@ import Kagamin.Modules
 import Kagamin.TextUtils
 import Control.Concurrent.MVar
 import Control.Exception (SomeException (..), try)
-import Control.Monad.State (MonadIO (..))
+import Control.Monad.State (MonadIO (..), get)
 import qualified Data.Text as T
 import Web.Slack
 import Web.Slack.Message
 import System.Random (newStdGen, randomIO, randomRIO)
 import DissociatedPress
+import Data.List (foldl')
 import Data.Text.Binary ()
 import qualified Data.Map.Strict as M
 import KagaInfo (kagaID)
@@ -56,16 +57,24 @@ getAlias :: MVar MarkovState -> UserId -> Slack () T.Text
 getAlias v (Id uid) =
   liftIO $ withMVar v (return . maybe uid id . M.lookup uid . aliases)
 
-applyAliases :: M.Map T.Text T.Text -> T.Text -> T.Text
-applyAliases m s = M.foldlWithKey' applyAlias s m
+applyAliases :: [User] -> M.Map T.Text T.Text -> T.Text -> T.Text
+applyAliases users aliasmap msg =
+    foldl' applyAliasNick (M.foldlWithKey' applyAlias msg aliasmap) users
   where
+    applyAliasNick m user
+      | Just alias <- M.lookup (unId $ _userId user) aliasmap =
+        T.replace (_userName user) alias m
+      | otherwise =
+        m
+    unId (Id x) = x
     mkTag uid = T.concat ["<@", uid, ">"]
-    applyAlias msg uid alias = T.replace (mkTag uid) alias msg
+    applyAlias m uid alias = T.replace (mkTag uid) alias m
 
 sendAliased :: MVar MarkovState -> ChannelId -> T.Text -> Slack () ()
 sendAliased v cid s = do
+  users <- (_slackUsers . _session) <$> get
   st <- liftIO $ withMVar v return
-  sendMessage cid (applyAliases (aliases st) s)
+  sendMessage cid (applyAliases users (aliases st) s)
 
 handleKagaMsg :: MVar MarkovState -> MsgHook
 handleKagaMsg v cid from msg
