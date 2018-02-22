@@ -14,7 +14,8 @@ import Kagamin.Modules.Markov
 import Kagamin.Modules.Links
 import Kagamin.Modules.Dice
 import Kagamin.Modules.Misc
-import Kagamin.Modules.Ambetsman 
+import Kagamin.Modules.Ambetsman
+import Kagamin.Modules.Osmakligt
 
 allModules :: [IO KagaModule]
 allModules =
@@ -23,6 +24,7 @@ allModules =
   , kagaDice
   , kagaMisc
   , kagaAmbetsman
+  , kagaTaste
   ]
 
 kagaConfig :: SlackConfig

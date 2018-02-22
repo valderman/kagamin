@@ -26,6 +26,7 @@ executable kagamin
     Kagamin.Modules.Dice
     Kagamin.Modules.Links
     Kagamin.Modules.Ambetsman 
+    Kagamin.Modules.Osmakligt
   ghc-options: -Wall -Werror -threaded
   other-extensions:
     OverloadedStrings, TupleSections
