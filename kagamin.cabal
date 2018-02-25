@@ -49,5 +49,6 @@ executable kagamin
     vector,
     random,
     data-default,
-    directory
+    directory,
+    acme-zalgo
   default-language: Haskell2010
