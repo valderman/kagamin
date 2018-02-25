@@ -7,6 +7,7 @@ import Kagamin.TextUtils
 import Web.Slack.Message
 import Web.Slack.Types.Event (Submitter (..))
 import Web.Slack.Types.Id (Id (..))
+import Control.Monad (when)
 import Control.Monad.State (MonadIO (..))
 import KagaInfo (kagaID)
 import qualified Data.Map as Map
