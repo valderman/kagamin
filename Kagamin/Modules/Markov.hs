@@ -24,19 +24,23 @@ data MarkovState = MarkovState
   }
 
 sendMessage :: ChannelId -> T.Text -> Slack t ()
-sendMessage cid msg = do
-  if "monika" `T.isInfixOf` msg
-    then do
-      msg' <- liftIO $ zalgoIOWith weak $ T.unpack msg
-      Web.Slack.Message.sendMessage cid $ T.pack $ msg'
-    else do
-      msg' <- liftIO $ randomRIO (0, 100 :: Int) >>= \case
-        100 -> T.pack <$> (monika $ T.unpack $ T.init $ T.init msg)
-        99  -> T.pack <$> (gradualZalgoIO 0.7 $ T.unpack msg)
-        98  -> T.pack <$> (zalgoIOWith weak $ T.unpack $ T.tail $ T.tail msg)
-        _   -> return msg
-      Web.Slack.Message.sendMessage cid msg'
+sendMessage cid message = do
+  msg' <- liftIO $ redactIO deletedGirls msg
+  msg'' <- case () of
+    () | msg /= msg' -> do
+           pure msg'
+       | "monika" `T.isInfixOf` message -> do
+           liftIO $ zalgoIOWith weak msg
+       | otherwise -> do
+           liftIO $ randomRIO (0, 100 :: Int) >>= \case
+             100 -> monika $ init $ init msg
+             99  -> gradualZalgoIO 0.7 msg
+             98  -> zalgoIOWith weak msg
+             _   -> return msg
+  Web.Slack.Message.sendMessage cid (T.pack msg'')
   where
+    msg = T.unpack message
+    deletedGirls = ["Natsuki","natsuki","NATSUKI","Sayori","sayori","SAYORI"]
     monika s = gradualZalgoIO 0.5 $ (s ++ "O N L Y M O N I K A")
     weak = defaultZalgoSettings
       { maxHeightAt = const 2

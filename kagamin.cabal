@@ -50,5 +50,5 @@ executable kagamin
     random,
     data-default,
     directory,
-    acme-zalgo
+    acme-zalgo >= 0.1.2.1
   default-language: Haskell2010
