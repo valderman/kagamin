@@ -34,6 +34,7 @@ handleOtherMsg lastref rankingref _cid (UserComment (Id from)) msg
           _      -> Just 1
       return Next
   | "nsfw" `T.isInfixOf` msg' = liftIO $ do
+      writeIORef lastref from
       atomicModifyIORef rankingref $ \r -> pair () $ alter' r from $ \case
         Just n -> Just (n+1)
         _      -> Just 1
