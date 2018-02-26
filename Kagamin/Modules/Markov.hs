@@ -84,7 +84,8 @@ getAlias v (Id uid) =
 
 applyAliases :: [User] -> M.Map T.Text T.Text -> T.Text -> T.Text
 applyAliases users aliasmap msg =
-    foldl' applyAliasNick (M.foldlWithKey' applyAlias msg aliasmap) users
+    T.replace "<!channel>" "kanalen" $
+      foldl' applyAliasNick (M.foldlWithKey' applyAlias msg aliasmap) users
   where
     applyAliasNick m user
       | Just alias <- M.lookup (unId $ _userId user) aliasmap =
